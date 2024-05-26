@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use ark_ff::{BigInt, Field};
 use ark_poly::multivariate::{SparsePolynomial, SparseTerm, Term};
@@ -10,8 +10,7 @@ pub trait PartialEval<F: Field> {
 
 fn partial_eval_term<F: Field>(term: &SparseTerm, values: &HashMap<usize, F>) -> (F, SparseTerm) {
     let mut coef = F::one();
-    let new_term = term
-        .iter()
+    let new_term = cfg_iter!(term)
         .filter_map(|&(idx, exp)| match values.get(&idx) {
             Some(val) => {
                 coef *= val.pow(BigInt::<1>::new([exp as u64]));
@@ -29,18 +28,12 @@ impl<F: Field> PartialEval<F> for SparsePolynomial<F, SparseTerm> {
         //     .map(|(coeff, term)| *coeff * term.evaluate(point))
         //     .sum()
 
-        let new_terms: Vec<_> = self
-            .terms
-            .iter()
+        let new_terms: Vec<_> = cfg_into_iter!(&self.terms)
             .map(|(coef, term)| {
                 let (eval_coef, new_term) = partial_eval_term(term, values);
                 (*coef * eval_coef, new_term)
             })
             .collect();
-
-        // TODO: rename/renumber the variables and recalculate num_vars
-        // let num_vars = new_terms.iter().flat_map(|(_, term)| term.iter().map(|(idx, _)| *idx)).collect::<HashSet<_>>().len();>
-        // SparsePolynomial::from_coefficients_vec(num_vars, new_terms)
 
         SparsePolynomial::from_coefficients_vec(self.num_vars, new_terms)
     }
@@ -65,11 +58,11 @@ impl<F: Field> ToNum<F> for SparsePolynomial<F, SparseTerm> {
 
 #[cfg(test)]
 mod test {
-    use crate::F;
     use ark_poly::multivariate::{SparsePolynomial, SparseTerm, Term};
     use ark_poly::DenseMVPolynomial;
 
     use super::PartialEval;
+    use crate::F;
 
     #[test]
     fn test_partial_eval() {

@@ -6,57 +6,67 @@ macro_rules! map {
     }};
 }
 
+#[macro_use]
+extern crate ark_std as _;
+
+mod channel;
 mod conversion;
 mod oracle_once;
 mod partial_eval;
 mod prover;
 mod verifier;
 
-use oracle_once::OracleOnce;
-use prover::Prover;
-use std::{sync::mpsc::channel, thread};
-use verifier::Verifier;
-
-use partial_eval::{PartialEval, ToNum};
+use std::thread;
 
 use ark_bls12_381::Fq2 as F;
-use ark_poly::{
-    multivariate::{SparsePolynomial, SparseTerm, Term},
-    univariate::SparsePolynomial as UVSparsePolynomial,
-    DenseMVPolynomial, Polynomial,
-};
+use ark_poly::multivariate::{SparsePolynomial, SparseTerm, Term};
+use ark_poly::univariate::SparsePolynomial as UVSparsePolynomial;
+use ark_poly::DenseMVPolynomial;
+use oracle_once::OracleOnce;
+use prover::Prover;
+use verifier::{Outcome, Verifier};
 
-use verifier::Outcome;
+use crate::channel::Channel;
 
 type Poly = SparsePolynomial<F, SparseTerm>;
 type UVPoly = UVSparsePolynomial<F>;
 
-enum Message {
-    Value(F),
-    MVPoly(Poly),
-    UVPoly(UVPoly),
-}
-
 fn main() {
-    // 3 x0^2 x1^2 + 2 x1^3 x2 + 4 x2 + 7
+    // 3 x0 x1 x2 x3 x4
+    // 4 x0 x2 x4
+    // 5 x1 x2 x3
+    // 7 x0 x1
+    // 2 x0 x4
+    // 8 x1 x2
+    // 17 x2 x3
+    // 12 x1
+    // 3 x4
+    // 9
     let poly = SparsePolynomial::from_coefficients_vec(
         5,
         vec![
-            (F::from(3), SparseTerm::new(vec![(0, 2), (1, 2)])),
-            (F::from(2), SparseTerm::new(vec![(1, 3), (2, 1)])),
-            (F::from(4), SparseTerm::new(vec![(2, 1)])),
-            (F::from(7), SparseTerm::new(vec![])),
+            (
+                F::from(3),
+                SparseTerm::new(vec![(0, 1), (1, 1), (2, 1), (3, 1), (4, 1)]),
+            ),
+            (F::from(4), SparseTerm::new(vec![(0, 1), (2, 1), (4, 1)])),
+            (F::from(5), SparseTerm::new(vec![(1, 1), (2, 1), (3, 1)])),
+            (F::from(7), SparseTerm::new(vec![(0, 1), (1, 1)])),
+            (F::from(2), SparseTerm::new(vec![(0, 1), (4, 1)])),
+            (F::from(8), SparseTerm::new(vec![(1, 1), (2, 1)])),
+            (F::from(17), SparseTerm::new(vec![(2, 1), (3, 1)])),
+            (F::from(12), SparseTerm::new(vec![(1, 1)])),
+            (F::from(3), SparseTerm::new(vec![(4, 1)])),
+            (F::from(9), SparseTerm::new(vec![])),
         ],
     );
-
     let poly_clone = poly.clone();
 
-    let (tx1, rx1) = channel();
-    let (tx2, rx2) = channel();
-    let prover = thread::spawn(move || Prover::new(poly).run_sumcheck(tx1, rx2));
+    let (ch1, ch2) = Channel::new_pair();
+    let prover = thread::spawn(move || Prover::new(poly).run_sumcheck(ch1));
     let verifier = thread::spawn(move || {
         let num_vars = poly_clone.num_vars;
-        let outcome = Verifier::new(OracleOnce::new(poly_clone), num_vars).run_sumcheck(tx2, rx1);
+        let outcome = Verifier::new(OracleOnce::new(poly_clone), num_vars).run_sumcheck(ch2);
         if let Ok(Outcome::Reject(msg)) = &outcome {
             eprintln!("Verifier rejected with message:\n{msg:?}");
         }

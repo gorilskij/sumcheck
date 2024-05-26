@@ -1,12 +1,9 @@
-use std::sync::mpsc::{Receiver, Sender};
-
-use ark_ff::Field;
 use ark_poly::Polynomial;
-
-use crate::{oracle_once::OracleOnce, Message};
-
-use super::{Poly, UVPoly, F};
 use ark_std::{One, UniformRand, Zero};
+
+use super::{UVPoly, F};
+use crate::channel::Channel;
+use crate::oracle_once::OracleOnce;
 
 pub struct Verifier {
     oracle: OracleOnce,
@@ -24,43 +21,28 @@ impl Verifier {
         Self { oracle, num_vars }
     }
 
-    pub fn run_sumcheck(
-        &mut self,
-        tx: Sender<Message>,
-        rx: Receiver<Message>,
-    ) -> anyhow::Result<Outcome> {
-        // TODO: error handling
-        let Message::Value(H) = rx.recv()? else {
-            panic!()
-        };
+    pub fn run_sumcheck(&mut self, ch: Channel) -> anyhow::Result<Outcome> {
+        let H = ch.recv::<F>()?;
 
         let mut rng = ark_std::test_rng();
         let mut last_value = H;
         let mut fixed = vec![];
         for i in 0..self.num_vars - 1 {
-            let Message::UVPoly(q) = rx.recv()? else {
-                panic!()
-            };
+            let q = ch.recv::<UVPoly>()?;
 
-            // TODO: verify polynomial
             if q.evaluate(&F::zero()) + q.evaluate(&F::one()) != last_value {
-                return Ok(Outcome::Reject(format!(
-                    "q(0) + q(1) != last_value in round {i}"
-                )));
+                return Ok(Outcome::Reject(format!("q(0) + q(1) != last_value in round {i}")));
             }
 
             let r = F::rand(&mut rng);
             fixed.push(r);
             last_value = q.evaluate(&r);
-            tx.send(Message::Value(r))?;
+            ch.send(r)?;
         }
 
         // last round
-        let Message::UVPoly(q) = rx.recv()? else {
-            panic!()
-        };
+        let q = ch.recv::<UVPoly>()?;
 
-        // TODO: verify polynomial
         if q.evaluate(&F::zero()) + q.evaluate(&F::one()) != last_value {
             return Ok(Outcome::Reject(
                 "q(0) + q(1) != last_value in the last round".to_string(),

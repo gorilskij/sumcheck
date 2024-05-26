@@ -1,5 +1,6 @@
-use super::{Poly, F};
 use ark_poly::Polynomial;
+
+use super::{Poly, F};
 
 pub struct OracleOnce(Option<Poly>);
 
@@ -9,9 +10,6 @@ impl OracleOnce {
     }
 
     pub fn evaluate(&mut self, point: &Vec<F>) -> F {
-        self.0
-            .take()
-            .expect("attempted repeated evaluation")
-            .evaluate(point)
+        self.0.take().expect("attempted repeated evaluation").evaluate(point)
     }
 }
