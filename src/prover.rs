@@ -16,6 +16,11 @@ impl Prover {
         Self { poly }
     }
 
+    /// `self.poly` summed over decreasing numbers of trailing variables.
+    /// The first element is H, the next element is free only in x_0,
+    /// the one after is free is x_0 and x_1, and so on until the last
+    /// element which is free in all variables except x_n (i.e. the last
+    /// element is equivalent to `[x_n := 0]self.poly + [x_n := 1]self.poly`)
     fn precompute_tails(&self) -> Vec<Poly> {
         assert!(self.poly.num_vars > 1);
 
@@ -39,14 +44,14 @@ impl Prover {
     }
 
     pub fn run_sumcheck(&mut self, ch: Channel) -> Result<()> {
-        let precomputed = self.precompute_tails();
+        let tails = self.precompute_tails();
 
-        let H = precomputed[0].to_num().expect("H is not 0-variate");
+        let H = tails[0].to_num().expect("H is not 0-variate");
         ch.send(H)?;
 
         let mut fixed = HashMap::new();
         for i in 0..self.poly.num_vars - 1 {
-            let q = precomputed[i + 1]
+            let q = tails[i + 1]
                 .partial_eval(&fixed)
                 .to_univariate()
                 .expect("q is not univariate");

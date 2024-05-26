@@ -16,6 +16,8 @@ mod partial_eval;
 mod prover;
 mod verifier;
 
+use std::cmp::max;
+use std::collections::HashMap;
 use std::thread;
 
 use ark_bls12_381::Fq2 as F;
@@ -66,7 +68,19 @@ fn main() {
     let prover = thread::spawn(move || Prover::new(poly).run_sumcheck(ch1));
     let verifier = thread::spawn(move || {
         let num_vars = poly_clone.num_vars;
-        let outcome = Verifier::new(OracleOnce::new(poly_clone), num_vars).run_sumcheck(ch2);
+        let degrees = {
+            let mut degrees = HashMap::new();
+            cfg_iter!(poly_clone.terms).for_each(|(_, term)| {
+                term.iter().for_each(|&(i, exp)| {
+                    degrees
+                        .entry(i)
+                        .and_modify(|current| *current = max(*current, exp))
+                        .or_insert(exp);
+                })
+            });
+            (0..num_vars).map(|i| degrees.get(&i).copied().unwrap_or(0)).collect()
+        };
+        let outcome = Verifier::new(OracleOnce::new(poly_clone), degrees).run_sumcheck(ch2);
         if let Ok(Outcome::Reject(msg)) = &outcome {
             eprintln!("Verifier rejected with message:\n{msg:?}");
         }

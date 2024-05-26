@@ -24,11 +24,7 @@ fn partial_eval_term<F: Field>(term: &SparseTerm, values: &HashMap<usize, F>) ->
 
 impl<F: Field> PartialEval<F> for SparsePolynomial<F, SparseTerm> {
     fn partial_eval(&self, values: &HashMap<usize, F>) -> Self {
-        // cfg_into_iter!(&self.terms)
-        //     .map(|(coeff, term)| *coeff * term.evaluate(point))
-        //     .sum()
-
-        let new_terms: Vec<_> = cfg_into_iter!(&self.terms)
+        let new_terms: Vec<_> = cfg_iter!(self.terms)
             .map(|(coef, term)| {
                 let (eval_coef, new_term) = partial_eval_term(term, values);
                 (*coef * eval_coef, new_term)
